@@ -1,0 +1,47 @@
+model:
+  name: 'siebert/sentiment-roberta-large-english'
+  num_classes: 2
+  max_length: 128
+  dropout_rate: 0.3
+  gradient_checkpointing: true  # Enable gradient checkpointing for memory efficiency
+
+training:
+  seed: 42
+  epochs: 50
+  train_batch_size: 16
+  eval_batch_size: 32
+  learning_rate: 5e-6
+  max_grad_norm: 1.0
+  gradient_accumulation_steps: 8
+  warmup_steps: 750
+  weight_decay: 0.02
+  early_stopping:
+    patience: 10  # Increased from 3 to 5
+    min_delta: 0.0005  # Reduced from 0.001 to 0.0005
+  cross_validation:
+    n_folds: 5
+    enabled: false  # Set to true to enable k-fold cross validation
+
+data:
+  train_ratio: 0.9
+  val_ratio: 0.1
+  num_workers: 4
+  augmentation:
+    enabled: true
+    synonym_replacement_prob: 0.1
+    random_deletion_prob: 0.1
+    max_aug_per_sample: 2
+
+paths:
+  base_path: '/home/user/Documents/Tim/NLP/final_project/tim_q4'
+  train_pos_path: '/home/user/Documents/Tim/NLP/final_project/tim_q4/data/train/mini_train_pos.csv'
+  train_neg_path: '/home/user/Documents/Tim/NLP/final_project/tim_q4/data/train/mini_train_neg.csv'
+  test_pos_path: '/home/user/Documents/Tim/NLP/final_project/tim_q4/data/testing/mini_test_pos.csv'
+  test_neg_path: '/home/user/Documents/Tim/NLP/final_project/tim_q4/data/testing/mini_test_neg.csv'
+  output_dir: '/home/user/Documents/Tim/NLP/final_project/tim_q4/training_runs'
+
+logging:
+  log_misclassified: true
+  log_interval: 100
+  save_top_k: 3  # Number of best models to save
+  metrics_to_track: ['f1']  # Only track f1 score for saving models
