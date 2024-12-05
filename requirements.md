@@ -1,0 +1,9 @@
+torch>=2.0.0
+transformers>=4.30.0
+scikit-learn>=1.0.0
+numpy>=1.21.0
+pandas>=1.3.0
+tqdm>=4.65.0
+wandb>=0.15.0
+mlflow>=2.8.0
+databricks-sdk>=0.12.0
