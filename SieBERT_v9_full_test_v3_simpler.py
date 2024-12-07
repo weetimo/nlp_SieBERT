@@ -1,5 +1,5 @@
-# SieBERT v8: Enhanced version with improved regularization and learning rate scheduling
-# To run: python /home/user/Documents/Tim/NLP/final_project/tim_q4/SieBERT/SieBERT_v8_full_test_v2.py
+# SieBERT v9: Simplified architecture with optimized hyperparameters
+# To run: python /home/user/Documents/Tim/NLP/final_project/tim_q4/SieBERT/SieBERT_v9_full_test_v3_simpler.py
 
 import torch
 import torch.nn as nn
@@ -24,39 +24,39 @@ from utils.data_augmentation import TextAugmenter
 from utils.metrics import MetricsTracker
 from utils.training import EarlyStopping, ModelCheckpointing
 
-# Enhanced configuration with improved hyperparameters
+# Simplified configuration with optimized hyperparameters
 CONFIG = {
     'model': {
         'name': 'siebert/sentiment-roberta-large-english',
         'num_classes': 2,
-        'max_length': 128,  # Changed from 256 to 128
-        'dropout_rate': 0.4,  # Increased dropout
+        'max_length': 128,
+        'dropout_rate': 0.4,
         'gradient_checkpointing': True,
         'attention': {
-            'num_sentences': 6,  # Increased attention window
+            'num_sentences': 6,
             'temperature': 0.07,  # Adjusted temperature for sharper attention
             'use_layer_norm': True,
-            'num_heads': 4,  # Multi-head attention
-            'dropout': 0.2  # Attention-specific dropout
+            'num_heads': 4,
+            'dropout': 0.2
         }
     },
     'training': {
         'seed': 42,
-        'epochs': 3,
-        'train_batch_size': 16,
+        'epochs': 50,
+        'train_batch_size': 16,  # Increased batch size
+        'gradient_accumulation_steps': 8,  # Same as V8
         'eval_batch_size': 32,
-        'learning_rate': 3e-6,  # Slightly lower learning rate
-        'max_grad_norm': 0.5,  # Reduced for stability
-        'gradient_accumulation_steps': 8,
-        'warmup_steps': 1000,  # Increased warmup
-        'weight_decay': 0.03,  # Increased weight decay
+        'learning_rate': 3e-6,  # Adjusted learning rate
+        'max_grad_norm': 1.0,  # Standard gradient clipping
+        'warmup_steps': 1000,
+        'weight_decay': 0.01,  # Standard weight decay
         'early_stopping': {
-            'patience': 10,  # Increased patience
+            'patience': 8,  # Reduced patience
             'min_delta': 0.0003
         },
         'scheduler': {
-            'type': 'one_cycle',  # Changed to OneCycleLR
-            'max_lr': 5e-5,
+            'type': 'one_cycle',
+            'max_lr': 3e-5,
             'pct_start': 0.3,
             'div_factor': 25.0,
             'final_div_factor': 10000.0
@@ -171,71 +171,48 @@ class SentimentClassifier(nn.Module):
         self.siebert = AutoModel.from_pretrained(config['model']['name'])
         hidden_size = self.siebert.config.hidden_size
         
-        # Multi-head attention
+        # Multi-head attention (keeping this useful feature)
         self.attention = MultiHeadLastSentenceAttention(hidden_size, config)
         
-        # Enhanced classifier with deeper architecture
+        # Simplified classifier architecture
         self.drop = nn.Dropout(p=config['model']['dropout_rate'])
         
-        # First block with larger hidden size
+        # Single hidden layer with layer norm
         self.fc1 = nn.Linear(hidden_size, 1024)
-        self.layer_norm1 = nn.LayerNorm(1024)
-        self.gelu = nn.GELU()  # Changed to GELU activation
+        self.layer_norm = nn.LayerNorm(1024)
+        self.gelu = nn.GELU()
         
-        # Second block with residual
-        self.fc2 = nn.Linear(1024, 1024)
-        self.layer_norm2 = nn.LayerNorm(1024)
-        
-        # Third block with bottleneck
-        self.fc3 = nn.Linear(1024, 512)
-        self.layer_norm3 = nn.LayerNorm(512)
-        
-        # Output block
-        self.fc4 = nn.Linear(512, config['model']['num_classes'])
+        # Output layer
+        self.fc2 = nn.Linear(1024, config['model']['num_classes'])
 
     def forward(self, input_ids, attention_mask):
-        # Get SIEBERT embeddings with gradient checkpointing if enabled
+        # Enable gradient checkpointing if configured
         if CONFIG['model']['gradient_checkpointing']:
             self.siebert.gradient_checkpointing_enable()
             
+        # Get SIEBERT embeddings
         outputs = self.siebert(
             input_ids=input_ids,
-            attention_mask=attention_mask
+            attention_mask=attention_mask,
+            return_dict=True
         )
         
+        # Apply attention mechanism
         sequence_output = outputs.last_hidden_state
-        
-        # Apply multi-head attention
         attended_output, _ = self.attention(sequence_output, attention_mask)
         
-        # First block
-        x = self.drop(attended_output)
-        x = self.fc1(x)
-        x = self.layer_norm1(x)
-        x = self.gelu(x)
+        # Global average pooling
+        pooled_output = torch.mean(attended_output, dim=1)
         
-        # Second block with residual
-        residual = x
+        # Simplified forward pass
+        x = self.drop(pooled_output)
+        x = self.fc1(x)
+        x = self.layer_norm(x)
+        x = self.gelu(x)
         x = self.drop(x)
         x = self.fc2(x)
-        x = self.layer_norm2(x)
-        x = self.gelu(x)
-        x = x + residual
         
-        # Third block
-        x = self.drop(x)
-        x = self.fc3(x)
-        x = self.layer_norm3(x)
-        x = self.gelu(x)
-        
-        # Output
-        x = self.drop(x)
-        logits = self.fc4(x)  # Shape: [batch_size, sequence_length, num_classes]
-        
-        # Take the mean over the sequence length dimension
-        logits = torch.mean(logits, dim=1)  # Shape: [batch_size, num_classes]
-        
-        return logits
+        return x
 
 class SentimentDataset(Dataset):
     def __init__(
